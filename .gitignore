@@ -1,0 +1,13 @@
+.env
+.streamlit/secrets.toml
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+outputs/*
+!outputs/.gitkeep

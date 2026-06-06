@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: psych-content-workbench
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.address 0.0.0.0 --server.port $PORT
+    envVars:
+      - key: DEEPSEEK_API_BASE
+        value: https://api.deepseek.com
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
