@@ -4033,7 +4033,9 @@ def is_temporary_image_url(url: str) -> bool:
 def is_streamlit_auth_static_url(url: str) -> bool:
     parsed = urlparse(url or "")
     host = (parsed.hostname or "").lower()
-    return host.endswith(".streamlit.app") and parsed.path.startswith("/app/static/")
+    return host.endswith(".streamlit.app") and (
+        parsed.path.startswith("/app/static/") or parsed.path.startswith("/media/")
+    )
 
 
 def is_publishable_image_url(url: str) -> bool:

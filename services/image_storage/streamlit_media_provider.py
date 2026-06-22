@@ -62,13 +62,14 @@ class StreamlitMediaStorageProvider(ImageStorageProvider):
             return media_url
 
         origin = urlunparse((parsed_base.scheme, parsed_base.netloc, "", "", "", ""))
+        base_host = (parsed_base.hostname or "").lower()
         if media_url.startswith("/~/+/"):
             return origin + media_url
         if media_url.startswith("/media/"):
-            if parsed_base.path.startswith("/~/+/"):
+            if base_host.endswith(".streamlit.app") or parsed_base.path.startswith("/~/+/"):
                 return origin + "/~/+" + media_url
             return origin + media_url
-        if media_url.startswith("media/") and parsed_base.path.startswith("/~/+/"):
+        if media_url.startswith("media/") and (base_host.endswith(".streamlit.app") or parsed_base.path.startswith("/~/+/")):
             return origin + "/~/+/" + media_url
         return urljoin(base_url, media_url)
 
