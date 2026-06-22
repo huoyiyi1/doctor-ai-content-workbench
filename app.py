@@ -3,11 +3,8 @@ from __future__ import annotations
 import base64
 import csv
 import json
-import platform
 import re
-import shutil
 import sqlite3
-import subprocess
 from html import escape
 from textwrap import dedent
 from datetime import date, datetime, timedelta
@@ -3460,39 +3457,157 @@ def export_markdown(task_id: str) -> Path:
     return output_path
 
 
-def copy_text_to_system_clipboard(text: str) -> tuple[bool, str]:
-    content = text or ""
-    if not content.strip():
-        return False, "没有可复制的内容。"
+def render_browser_copy_button(
+    label: str,
+    content: str,
+    key: str,
+    *,
+    success_message: str = "已复制，可粘贴到 Raphael。",
+    failure_message: str = "复制失败，请展开下方「复制兜底 / 下载 Markdown」手动复制。",
+) -> None:
+    """Render a browser-side copy button for public Streamlit deployments."""
+    safe_content = json.dumps(content or "", ensure_ascii=False)
+    safe_label = escape(label)
+    safe_success = json.dumps(success_message, ensure_ascii=False)
+    safe_failure = json.dumps(failure_message, ensure_ascii=False)
+    safe_key = re.sub(r"[^a-zA-Z0-9_-]", "_", key)
 
-    current_system = platform.system().lower()
-    commands: list[list[str]] = []
-    if current_system == "darwin":
-        commands = [["pbcopy"]]
-    elif current_system == "windows":
-        commands = [["clip"]]
-    else:
-        commands = [["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]]
+    html = f"""
+    <div class="copy-wrap">
+      <button id="copy-btn-{safe_key}" class="copy-btn" type="button">{safe_label}</button>
+      <span id="copy-status-{safe_key}" class="copy-status" aria-live="polite"></span>
+    </div>
 
-    for command in commands:
-        if not shutil.which(command[0]):
-            continue
-        try:
-            subprocess.run(command, input=content.encode("utf-8"), check=True)
-            return True, ""
-        except Exception:
-            continue
-    return False, "当前环境没有可用的剪贴板工具，请手动复制文本框内容。"
+    <script>
+    (() => {{
+      const text = {safe_content};
+      const successMessage = {safe_success};
+      const failureMessage = {safe_failure};
+      const button = document.getElementById("copy-btn-{safe_key}");
+      const status = document.getElementById("copy-status-{safe_key}");
+
+      function setStatus(message, className) {{
+        status.textContent = message;
+        status.className = "copy-status " + className;
+      }}
+
+      function fallbackCopy(value) {{
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "-9999px";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        let ok = false;
+        try {{
+          ok = document.execCommand("copy");
+        }} catch (err) {{
+          ok = false;
+        }}
+        document.body.removeChild(textarea);
+        return ok;
+      }}
+
+      async function copyText() {{
+        if (!text.trim()) {{
+          setStatus("没有可复制的内容。", "fail");
+          return;
+        }}
+        setStatus("复制中...", "muted");
+        try {{
+          if (navigator.clipboard && window.isSecureContext) {{
+            await navigator.clipboard.writeText(text);
+            setStatus(successMessage, "ok");
+            return;
+          }}
+        }} catch (err) {{}}
+
+        if (fallbackCopy(text)) {{
+          setStatus(successMessage, "ok");
+        }} else {{
+          setStatus(failureMessage, "fail");
+        }}
+      }}
+
+      button.addEventListener("click", copyText);
+    }})();
+    </script>
+
+    <style>
+    html, body {{
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      color-scheme: light dark;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    .copy-wrap {{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+      min-height: 64px;
+    }}
+    .copy-btn {{
+      width: 100%;
+      min-height: 42px;
+      padding: 0.58rem 0.9rem;
+      border: 1px solid rgba(49, 51, 63, 0.22);
+      border-radius: 8px;
+      background: #ffffff;
+      color: #262730;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.2;
+    }}
+    .copy-btn:hover {{
+      border-color: #ff4b4b;
+      color: #ff4b4b;
+    }}
+    .copy-btn:active {{
+      transform: translateY(1px);
+    }}
+    .copy-status {{
+      min-height: 18px;
+      font-size: 12px;
+      line-height: 1.45;
+      word-break: break-word;
+    }}
+    .copy-status.muted {{
+      color: #8a8f98;
+    }}
+    .copy-status.ok {{
+      color: #16a34a;
+    }}
+    .copy-status.fail {{
+      color: #d97706;
+    }}
+    @media (prefers-color-scheme: dark) {{
+      .copy-btn {{
+        border-color: rgba(250, 250, 250, 0.24);
+        background: transparent;
+        color: #fafafa;
+      }}
+    }}
+    </style>
+    """
+    components.html(html, height=76)
 
 
 def render_copy_button(text: str, label: str, copied_label: str) -> None:
     button_key = f"copy_{re.sub(r'[^a-zA-Z0-9_]', '_', label)}_{abs(hash(text or '')) % 1000000}"
-    if st.button(label, key=button_key, use_container_width=True):
-        ok, message = copy_text_to_system_clipboard(text)
-        if ok:
-            st.success(copied_label)
-        else:
-            st.warning(message)
+    render_browser_copy_button(
+        label,
+        text,
+        button_key,
+        success_message=copied_label,
+    )
 
 
 def run_action(label: str, action, *args, button_type: str = "secondary", key: Optional[str] = None) -> None:
@@ -4954,13 +5069,23 @@ def render_task_detail_page(tasks: List[Dict[str, str]]) -> None:
     with action_cols[1]:
         if can_publish_actions:
             text_only_markdown = build_publish_markdown_for_task(task["task_id"], "text_only")
-            render_copy_button(text_only_markdown, "复制文字版 Markdown", "已复制文字版")
+            render_browser_copy_button(
+                "复制文字版 Markdown",
+                text_only_markdown,
+                key=f"detail_text_copy_{task['task_id']}",
+                success_message="文字版 Markdown 已复制。",
+            )
         else:
             st.button("复制文字版", disabled=True, help="审核通过后才能复制发布内容。", use_container_width=True)
     with action_cols[2]:
         if can_publish_actions:
             with_images_markdown = build_publish_markdown_for_task(task["task_id"], "with_images")
-            render_copy_button(with_images_markdown, "复制图文版 Markdown", "已复制图文版")
+            render_browser_copy_button(
+                "复制图文版 Markdown",
+                with_images_markdown,
+                key=f"detail_image_copy_{task['task_id']}",
+                success_message="图文版 Markdown 已复制。",
+            )
         else:
             st.button("复制图文版", disabled=True, help="审核通过后才能复制发布内容。", use_container_width=True)
     with action_cols[3]:
