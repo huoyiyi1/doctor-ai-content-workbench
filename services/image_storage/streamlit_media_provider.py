@@ -16,7 +16,7 @@ class StreamlitMediaStorageProvider(ImageStorageProvider):
     """
 
     def __init__(self, public_base_url: str = "") -> None:
-        self.public_base_url = public_base_url.strip().rstrip("/")
+        self.public_base_url = self._normalize_public_base_url(public_base_url)
 
     def upload_image(self, local_path: str) -> ImageStorageResult:
         path = Path(local_path or "")
@@ -71,3 +71,12 @@ class StreamlitMediaStorageProvider(ImageStorageProvider):
         if media_url.startswith("media/") and parsed_base.path.startswith("/~/+/"):
             return origin + "/~/+/" + media_url
         return urljoin(base_url, media_url)
+
+    @staticmethod
+    def _normalize_public_base_url(public_base_url: str) -> str:
+        clean_url = public_base_url.strip().rstrip("/")
+        parsed = urlparse(clean_url)
+        host = (parsed.hostname or "").lower()
+        if host.endswith(".streamlit.app") and parsed.path.startswith("/app/static"):
+            return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+        return clean_url
