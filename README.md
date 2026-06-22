@@ -322,15 +322,15 @@ SILICONFLOW_IMAGE_MODEL=Tongyi-MAI/Z-Image-Turbo
 - 如果要让 Raphael 或公众号后台稳定显示图片，请配置稳定图片存储。图文版 Markdown 只会使用稳定 HTTPS 链接，不会使用 SiliconFlow 临时链接。
 
 ```env
-# 方案一：Cloudinary 免费图床，适合演示和轻量使用
+# 方案一：Streamlit Cloud 内置 media 链接，适合快速公开演示
+IMAGE_STORAGE_PROVIDER=streamlit_media
+IMAGE_PUBLIC_BASE_URL=https://你的应用域名
+
+# 方案二：Cloudinary 免费图床，适合更稳定的长期使用
 IMAGE_STORAGE_PROVIDER=cloudinary
 CLOUDINARY_CLOUD_NAME=你的 cloud name
 CLOUDINARY_UPLOAD_PRESET=你的 unsigned upload preset
 CLOUDINARY_FOLDER=wechat-ai-workbench
-
-# 方案二：部署版静态图片目录，适合公开部署后的演示
-IMAGE_STORAGE_PROVIDER=local_static_public
-IMAGE_PUBLIC_BASE_URL=https://你的应用域名/app/static/images
 ```
 
 配置后，在“图片生成中心”点击“生成稳定发布链接”，系统会把本地图片上传并写回稳定 HTTPS 链接。

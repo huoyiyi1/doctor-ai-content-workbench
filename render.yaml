@@ -26,6 +26,6 @@ services:
       - key: SILICONFLOW_API_KEY
         sync: false
       - key: IMAGE_STORAGE_PROVIDER
-        value: local_static_public
+        value: streamlit_media
       - key: IMAGE_PUBLIC_BASE_URL
-        value: https://psych-content-workbench.onrender.com/app/static/images
+        value: https://psych-content-workbench.onrender.com

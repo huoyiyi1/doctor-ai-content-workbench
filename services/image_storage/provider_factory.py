@@ -4,6 +4,7 @@ from .base import ImageStorageProvider
 from .cloudinary_provider import CloudinaryUnsignedStorageProvider
 from .local_provider import LocalOnlyStorageProvider, LocalStaticPublicStorageProvider
 from .manual_url_provider import ManualUrlStorageProvider
+from .streamlit_media_provider import StreamlitMediaStorageProvider
 
 
 def get_image_storage_provider(provider_name: str | None = None, public_base_url: str = "") -> ImageStorageProvider:
@@ -12,6 +13,8 @@ def get_image_storage_provider(provider_name: str | None = None, public_base_url
         return LocalOnlyStorageProvider()
     if provider == "local_static_public":
         return LocalStaticPublicStorageProvider(public_base_url)
+    if provider == "streamlit_media":
+        return StreamlitMediaStorageProvider(public_base_url)
     if provider in {"cloudinary", "cloudinary_unsigned"}:
         return CloudinaryUnsignedStorageProvider()
     return ManualUrlStorageProvider()

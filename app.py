@@ -4030,11 +4030,17 @@ def is_temporary_image_url(url: str) -> bool:
     return "siliconflow-image" in host or any(marker in query for marker in temporary_markers)
 
 
+def is_streamlit_auth_static_url(url: str) -> bool:
+    parsed = urlparse(url or "")
+    host = (parsed.hostname or "").lower()
+    return host.endswith(".streamlit.app") and parsed.path.startswith("/app/static/")
+
+
 def is_publishable_image_url(url: str) -> bool:
     parsed = urlparse(url or "")
     if parsed.scheme != "https":
         return False
-    if is_local_public_url(url) or is_temporary_image_url(url):
+    if is_local_public_url(url) or is_temporary_image_url(url) or is_streamlit_auth_static_url(url):
         return False
     return True
 
