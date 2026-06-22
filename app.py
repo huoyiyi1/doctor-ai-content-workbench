@@ -3363,9 +3363,7 @@ def render_article_markdown_preview(draft_id: int, markdown: str) -> None:
         slot_key = match.group(1).strip()
         image = images.get(slot_key)
         if image and image.public_url:
-            st.image(image.public_url, caption=image.caption or image.alt_text or None, use_container_width=True)
-            if image.caption:
-                st.caption(image.caption)
+            st.image(image.public_url, use_container_width=True)
         else:
             st.markdown(
                 f"""
