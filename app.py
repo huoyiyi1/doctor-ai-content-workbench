@@ -72,7 +72,6 @@ NAV_PAGES = [
     "知识库",
     "计划生成",
     "历史稿件",
-    "设置",
 ]
 HIDDEN_PAGES = [
     "新建文章页",
@@ -2949,13 +2948,6 @@ def strip_image_placeholders(markdown: str) -> str:
     return cleanup_markdown_spacing(text)
 
 
-def image_caption_markdown(caption: str) -> str:
-    clean_caption = sanitize_model_text(caption).strip()
-    if not clean_caption:
-        return ""
-    return f'\n\n<center><span style="font-size: 12px; color: #888;">{clean_caption}</span></center>'
-
-
 def build_publish_markdown(article_id: int, mode: str = "text_only") -> str:
     from orm_models import get_article_draft
 
@@ -2978,9 +2970,9 @@ def build_publish_markdown(article_id: int, mode: str = "text_only") -> str:
             return "> [此处保留插图位置：请手动补充图片]"
         if not image.selected:
             return ""
-        alt_text = image.alt_text or image.caption or image.prompt[:80] or "文章配图"
         if is_publishable_image_url(image.public_url):
-            return f"![{alt_text}]({image.public_url})" + image_caption_markdown(image.caption)
+            return f"![]({image.public_url})"
+        alt_text = image.alt_text or image.caption or image.prompt[:80] or "文章配图"
         return f"> [此处保留插图位置：{alt_text}。请先生成稳定公网图片链接]"
 
     return cleanup_markdown_spacing(IMAGE_PLACEHOLDER_RE.sub(replace_match, body))
