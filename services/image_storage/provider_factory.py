@@ -38,6 +38,8 @@ def get_image_storage_provider(provider_name: str | None = None, public_base_url
             return LocalStaticPublicStorageProvider(normalize_streamlit_static_base(public_base_url))
         return LocalStaticPublicStorageProvider(public_base_url)
     if provider == "streamlit_media":
+        if ".streamlit.app" in public_base:
+            return LocalStaticPublicStorageProvider(normalize_streamlit_static_base(public_base_url))
         return StreamlitMediaStorageProvider(public_base_url)
     if provider in {"cloudinary", "cloudinary_unsigned"}:
         return CloudinaryUnsignedStorageProvider()
