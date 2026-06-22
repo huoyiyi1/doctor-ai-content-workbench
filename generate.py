@@ -39,8 +39,8 @@ REQUIRED_FIELDS = [
 ]
 
 REQUIRED_STATEMENTS = [
-    "本文由 AI 辅助整理，医生审核后发布。",
-    "本文仅作心理健康科普，不替代诊断、治疗或个体化心理咨询。",
+    "本文由 AI 辅助整理，审核后发布。",
+    "本文仅作科普参考，不替代专业诊断、治疗或个体化咨询建议。",
 ]
 
 SKIP_STATUSES = {"skip", "skipped", "done", "finished", "跳过", "不生成", "已完成"}
@@ -213,7 +213,11 @@ def render_prompt(template: str, task: Mapping[str, str], **extra: str) -> str:
     values = SafeFormatDict(task)
     values.update(extra)
     values["task_table"] = render_task_table(task)
-    return template.format_map(values)
+    result = template
+    for key, value in values.items():
+        result = result.replace("{{" + key + "}}", str(value or ""))
+        result = result.replace("{" + key + "}", str(value or ""))
+    return result
 
 
 def call_deepseek(config: Mapping[str, str], user_prompt: str, temperature: float = 0.4) -> str:
@@ -310,45 +314,22 @@ def ensure_required_statements(article: str) -> str:
     return result.strip()
 
 
-def ensure_teleclaw_boundary(task_package: str, doctor_approved: bool) -> str:
-    gate_status = "医生已审核通过，执行前仍需医生最终确认。" if doctor_approved else "医生尚未审核通过，当前任务包禁止执行。"
-    boundary = f"""
-
-## TeleClaw 执行边界确认
-- 当前门禁：{gate_status}
-- TeleClaw 只允许创建并保存微信公众号草稿。
-- TeleClaw 严禁发布、发表、群发。
-- TeleClaw 严禁点击任何最终发布、确认发布、群发确认按钮。
-- 最终发布必须由医生本人手动完成。
-""".strip()
-
-    if "TeleClaw 执行边界确认" in task_package:
-        return task_package.strip()
-    return task_package.rstrip() + "\n\n" + boundary
-
-
 def assemble_package(
     task: Mapping[str, str],
     article: str,
     risk_review: str,
-    teleclaw_package: str,
     doctor_approved: bool,
 ) -> str:
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    teleclaw_status = (
-        "可在医生最终确认后创建公众号草稿"
-        if doctor_approved
-        else "待医生审核，禁止执行 TeleClaw 创建草稿"
-    )
+    publish_status = "已审核通过，可进入发布前准备" if doctor_approved else "待审核，暂不进入发布前准备"
 
     reminders = "\n".join(
         [
             "- 不处理原始心理咨询记录。",
             "- 不存储真实患者或来访者身份信息。",
             "- AI 不做诊断，不给药物建议，不承诺疗效。",
-            "- TeleClaw 只允许创建公众号草稿，不允许发布、发表、群发。",
-            "- 医生必须审核文章初稿和风险审核结果，确认通过后再进入草稿创建环节。",
-            "- 最终发布必须由医生本人手动完成。",
+            "- 文章必须经过人工审核后，才能复制到 Raphael 和公众号后台。",
+            "- 系统不自动发布、发表或群发公众号文章。",
         ]
     )
 
@@ -361,7 +342,7 @@ def assemble_package(
 - 医生署名：{task.get("doctor_name", "")}
 - 任务表状态：{task.get("status", "") or "未填写"}
 - 生成时间：{generated_at}
-- TeleClaw 状态：{teleclaw_status}
+- 发布前准备状态：{publish_status}
 
 【文章初稿】
 
@@ -371,9 +352,12 @@ def assemble_package(
 
 {risk_review}
 
-【TeleClaw任务包】
+【发布前准备】
 
-{teleclaw_package}
+- 复制文章 Markdown。
+- 打开 Raphael：https://publish.raphael.app
+- 在 Raphael 中粘贴预览，再复制到公众号后台。
+- 最终发布必须由人工在公众号后台完成。
 
 【提醒】
 
@@ -400,15 +384,15 @@ def assemble_failure_package(task: Mapping[str, str], error_message: str) -> str
 
 生成失败，未得到风险审核结果。
 
-【TeleClaw任务包】
+【发布前准备】
 
-生成失败，未得到 TeleClaw 任务包。不得执行任何公众号后台操作。
+生成失败，不进入发布前准备。
 
 【提醒】
 
 - 请先修复上面的错误提示，再重新运行。
 - 不要把原始心理咨询记录或真实患者、来访者身份信息填入任务表。
-- TeleClaw 只允许创建公众号草稿，不允许发布、发表、群发。
+- 系统不自动发布、发表或群发公众号文章。
 """
 
 
@@ -424,16 +408,9 @@ def process_task(config: Mapping[str, str], task: Mapping[str, str], row_number:
     validate_task(task, row_number)
 
     doctor_approved = is_doctor_approved(task.get("status", ""))
-    doctor_status = task.get("status", "") or "未填写"
-    teleclaw_gate = (
-        "医生已审核通过。TeleClaw 仍然只能创建并保存公众号草稿，不得发布。"
-        if doctor_approved
-        else "医生尚未审核通过。当前任务包只能用于医生审核，禁止交给 TeleClaw 执行。"
-    )
 
     article_template = read_prompt("article_prompt.txt")
     risk_template = read_prompt("risk_review_prompt.txt")
-    teleclaw_template = read_prompt("teleclaw_prompt.txt")
 
     article_prompt = render_prompt(article_template, task)
     article = call_deepseek(config, article_prompt, temperature=0.5)
@@ -442,18 +419,7 @@ def process_task(config: Mapping[str, str], task: Mapping[str, str], row_number:
     risk_prompt = render_prompt(risk_template, task, article_draft=article)
     risk_review = call_deepseek(config, risk_prompt, temperature=0.2)
 
-    teleclaw_prompt = render_prompt(
-        teleclaw_template,
-        task,
-        article_draft=article,
-        risk_review=risk_review,
-        doctor_approval_status=doctor_status,
-        teleclaw_execution_gate=teleclaw_gate,
-    )
-    teleclaw_package = call_deepseek(config, teleclaw_prompt, temperature=0.2)
-    teleclaw_package = ensure_teleclaw_boundary(teleclaw_package, doctor_approved)
-
-    full_package = assemble_package(task, article, risk_review, teleclaw_package, doctor_approved)
+    full_package = assemble_package(task, article, risk_review, doctor_approved)
     return write_package(task["task_id"], full_package)
 
 

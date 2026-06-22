@@ -13,3 +13,19 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: IMAGE_GENERATION_ENABLED
+        value: "true"
+      - key: IMAGE_PROVIDER
+        value: siliconflow
+      - key: IMAGE_MODEL
+        value: Tongyi-MAI/Z-Image-Turbo
+      - key: SILICONFLOW_API_BASE
+        value: https://api.siliconflow.com/v1
+      - key: SILICONFLOW_IMAGE_MODEL
+        value: Tongyi-MAI/Z-Image-Turbo
+      - key: SILICONFLOW_API_KEY
+        sync: false
+      - key: IMAGE_STORAGE_PROVIDER
+        value: local_static_public
+      - key: IMAGE_PUBLIC_BASE_URL
+        value: https://psych-content-workbench.onrender.com/app/static/images
