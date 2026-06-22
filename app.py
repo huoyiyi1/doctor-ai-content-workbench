@@ -4034,7 +4034,9 @@ def is_streamlit_auth_static_url(url: str) -> bool:
     parsed = urlparse(url or "")
     host = (parsed.hostname or "").lower()
     return host.endswith(".streamlit.app") and (
-        parsed.path.startswith("/app/static/") or parsed.path.startswith("/media/")
+        parsed.path.startswith("/app/static/")
+        or parsed.path.startswith("/media/")
+        or parsed.path.startswith("/~/+/media/")
     )
 
 
