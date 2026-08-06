@@ -5,13 +5,15 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Iterator, Optional, Sequence
 
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, create_engine, event, select, text
+from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, create_engine, event, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
-from generate import BASE_DIR
+from generate import BASE_DIR, get_runtime_setting, load_env
 
 
 DATABASE_PATH = BASE_DIR / "data" / "tasks.db"
+
+load_env()
 
 
 def now_text() -> str:
@@ -58,7 +60,9 @@ class KnowledgeItem(TimestampMixin, Base):
 
     # Legacy columns kept so old pages can keep working during the staged V2 migration.
     legacy_type: Mapped[str] = mapped_column("type", String(60), default="topic_material")
-    enabled: Mapped[bool] = mapped_column(default=True)
+    # The legacy table stores this flag as INTEGER in both SQLite and Postgres.
+    # Keeping the ORM type aligned avoids sending Postgres booleans to an INTEGER column.
+    enabled: Mapped[int] = mapped_column(default=1)
 
     knowledge_base: Mapped[Optional[KnowledgeBase]] = relationship(back_populates="items")
 
@@ -183,18 +187,29 @@ class AppSettings(Base):
     updated_at: Mapped[str] = mapped_column(String(19), default=now_text, onupdate=now_text)
 
 
-engine = create_engine(
-    f"sqlite:///{DATABASE_PATH}",
-    connect_args={"check_same_thread": False},
-    future=True,
-)
+def _database_url() -> str:
+    raw_url = get_runtime_setting("DATABASE_URL").strip()
+    if raw_url.startswith("postgres://"):
+        return "postgresql+psycopg://" + raw_url.removeprefix("postgres://")
+    if raw_url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + raw_url.removeprefix("postgresql://")
+    return raw_url or f"sqlite:///{DATABASE_PATH}"
 
 
-@event.listens_for(engine, "connect")
-def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+DATABASE_URL = _database_url()
+engine_options: dict[str, object] = {"future": True, "pool_pre_ping": True}
+if DATABASE_URL.startswith("sqlite:"):
+    engine_options["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(DATABASE_URL, **engine_options)
+
+
+if engine.dialect.name == "sqlite":
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
@@ -214,16 +229,11 @@ def orm_session() -> Iterator[Session]:
 
 
 def _table_columns(session: Session, table_name: str) -> set[str]:
-    rows = session.execute(text(f"PRAGMA table_info({table_name})")).mappings().all()
-    return {str(row["name"]) for row in rows}
+    return {str(column["name"]) for column in inspect(session.get_bind()).get_columns(table_name)}
 
 
 def _table_exists(session: Session, table_name: str) -> bool:
-    row = session.execute(
-        text("SELECT name FROM sqlite_master WHERE type='table' AND name=:name"),
-        {"name": table_name},
-    ).first()
-    return row is not None
+    return inspect(session.get_bind()).has_table(table_name)
 
 
 def _ensure_column(session: Session, table_name: str, column_name: str, definition: str) -> None:
@@ -255,7 +265,11 @@ def _ensure_generated_image_columns(session: Session) -> None:
         "aspect_ratio": "TEXT NOT NULL DEFAULT '16:9'",
         "style_preset": "TEXT NOT NULL DEFAULT '温和治愈插画'",
         "visual_params": "TEXT NOT NULL DEFAULT '{}'",
-        "selected": "BOOLEAN NOT NULL DEFAULT 1",
+        "selected": (
+            "BOOLEAN NOT NULL DEFAULT TRUE"
+            if session.get_bind().dialect.name == "postgresql"
+            else "BOOLEAN NOT NULL DEFAULT 1"
+        ),
         "status": "TEXT NOT NULL DEFAULT 'prompt_ready'",
         "error_message": "TEXT NOT NULL DEFAULT ''",
         "created_at": "TEXT NOT NULL DEFAULT ''",
@@ -320,7 +334,7 @@ def _seed_compliance_item(session: Session, knowledge_base_id: int) -> None:
             risk_level="低",
             usage_status="unused",
             legacy_type="compliance",
-            enabled=True,
+            enabled=1,
         )
     )
 
@@ -409,7 +423,8 @@ def _sync_tags(session: Session) -> None:
 
 
 def init_orm_database() -> None:
-    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if engine.dialect.name == "sqlite":
+        DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(engine)
     with orm_session() as session:
         _ensure_knowledge_item_columns(session)
@@ -486,7 +501,7 @@ def create_knowledge_content(
             risk_level=risk_level.strip(),
             usage_status=usage_status,
             legacy_type="topic_material",
-            enabled=True,
+            enabled=1,
         )
         session.add(item)
         session.flush()
@@ -516,7 +531,7 @@ def update_knowledge_content(
         item.tags = tags.strip()
         item.risk_level = risk_level.strip()
         item.usage_status = usage_status
-        item.enabled = enabled
+        item.enabled = 1 if enabled else 0
         item.updated_at = now_text()
         _sync_tags(session)
 
