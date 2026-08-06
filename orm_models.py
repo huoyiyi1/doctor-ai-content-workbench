@@ -229,11 +229,11 @@ def orm_session() -> Iterator[Session]:
 
 
 def _table_columns(session: Session, table_name: str) -> set[str]:
-    return {str(column["name"]) for column in inspect(session.get_bind()).get_columns(table_name)}
+    return {str(column["name"]) for column in inspect(session.connection()).get_columns(table_name)}
 
 
 def _table_exists(session: Session, table_name: str) -> bool:
-    return inspect(session.get_bind()).has_table(table_name)
+    return inspect(session.connection()).has_table(table_name)
 
 
 def _ensure_column(session: Session, table_name: str, column_name: str, definition: str) -> None:
