@@ -237,6 +237,11 @@ def _table_exists(session: Session, table_name: str) -> bool:
 
 
 def _ensure_column(session: Session, table_name: str, column_name: str, definition: str) -> None:
+    if session.get_bind().dialect.name == "postgresql":
+        session.execute(
+            text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {column_name} {definition}")
+        )
+        return
     if column_name not in _table_columns(session, table_name):
         session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}"))
 
